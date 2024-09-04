@@ -345,9 +345,9 @@ Value* BlockAST::codegen(driver& drv) {
     AllocaTmp.push_back(drv.NamedValues[Def[i]->getName()]);
     drv.NamedValues[Def[i]->getName()] = boundval;
   };
-  // Generates code which evaluates the expression using the symbol table
+
+  // Generates code which evaluate statements using the symbol table
   // updated to internal scope
-  
   Value *val = nullptr;
   for (int i=0, e=Stmts.size(); i<e; i++) {
     val = Stmts[i]->codegen(drv);
@@ -382,7 +382,7 @@ AllocaInst* VarBindingAST::codegen(driver& drv) {
 
   // Generates code and returns the value of RHS
   Value *BoundVal = nullptr;
-  if (!Val) {
+  if (Val) {
     BoundVal = Val->codegen(drv);
     if (!BoundVal)
       return nullptr;

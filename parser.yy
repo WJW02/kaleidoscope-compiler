@@ -8,7 +8,7 @@
 %define parse.assert
 
 %code requires {
-  # include <string>
+  #include <string>
   #include <exception>
   class driver;
   class RootAST;
@@ -19,8 +19,8 @@
   class FunctionAST;
   class SeqAST;
   class PrototypeAST;
-  class BlockExprAST;
   class VarBindingAST;
+  class BlockAST;
 }
 
 // The parsing context.
@@ -32,7 +32,7 @@
 %define parse.error verbose
 
 %code {
-# include "driver.hpp"
+#include "driver.hpp"
 }
 
 %define api.token.prefix {TOK_}
@@ -64,6 +64,7 @@
 %type <ExprAST*> idexp
 %type <ExprAST*> expif
 %type <ExprAST*> condexp
+%type <ExprAST*> initexp
 %type <std::vector<ExprAST*>> optexp
 %type <std::vector<ExprAST*>> explist
 %type <RootAST*> program
@@ -72,92 +73,112 @@
 %type <PrototypeAST*> external
 %type <PrototypeAST*> proto
 %type <std::vector<std::string>> idseq
-%type <BlockExprAST*> blockexp
 %type <std::vector<VarBindingAST*>> vardefs
 %type <VarBindingAST*> binding
-
+%type <std::vector<RootAST*>> stmts
+%type <RootAST*> stmt
+%type <BlockAST*> block
 
 %%
+
 %start startsymb;
 
 startsymb:
-program                 { drv.root = $1; }
+  program                    { drv.root = $1; }
 
 program:
-  %empty                { $$ = new SeqAST(nullptr,nullptr); }
-|  top ";" program      { $$ = new SeqAST($1,$3); };
+  %empty                     { $$ = new SeqAST(nullptr,nullptr); }
+|  top ";" program           { $$ = new SeqAST($1,$3); };
 
 top:
-%empty                  { $$ = nullptr; }
-| definition            { $$ = $1; }
-| external              { $$ = $1; };
+  %empty                     { $$ = nullptr; }
+| definition                 { $$ = $1; }
+| external                   { $$ = $1; };
 
 definition:
-  "def" proto exp       { $$ = new FunctionAST($2,$3); $2->noemit(); };
+  "def" proto block          { $$ = new FunctionAST($2,$3); 
+                               $2->noemit(); };
 
 external:
-  "extern" proto        { $$ = $2; };
+  "extern" proto             { $$ = $2; };
 
 proto:
-  "id" "(" idseq ")"    { $$ = new PrototypeAST($1,$3);  };
+  "id" "(" idseq ")"         { $$ = new PrototypeAST($1,$3); };
 
 idseq:
-  %empty                { std::vector<std::string> args;
-                         $$ = args; }
-| "id" idseq            { $2.insert($2.begin(),$1); $$ = $2; };
+  %empty                     { std::vector<std::string> args;
+                               $$ = args; }
+| "id" idseq                 { $2.insert($2.begin(),$1);
+                               $$ = $2; };
 
 %left ":";
 %left "<" "==";
 %left "+" "-";
 %left "*" "/";
 
-exp:
-  exp "+" exp           { $$ = new BinaryExprAST('+',$1,$3); }
-| exp "-" exp           { $$ = new BinaryExprAST('-',$1,$3); }
-| exp "*" exp           { $$ = new BinaryExprAST('*',$1,$3); }
-| exp "/" exp           { $$ = new BinaryExprAST('/',$1,$3); }
-| idexp                 { $$ = $1; }
-| "(" exp ")"           { $$ = $2; }
-| "number"              { $$ = new NumberExprAST($1); }
-| expif                 { $$ = $1; }
-| blockexp              { $$ = $1; };
+stmts:
+  stmt                       { std::vector<RootAST*> stmtlist;
+                               stmtlist.push_back($1);
+                               $$ = stmtlist; }
+| stmt ";" stmts             { $3.insert($3.begin(),$1);
+                               $$ = $3; };
 
-blockexp:
-  "{" vardefs ";" exp "}" { $$ = new BlockExprAST($2,$4); }
-  
+stmt:
+  block                      { $$ = $1; }
+| exp                        { $$ = $1; };
+
+block:
+  "{" stmts "}"              { std::vector<VarBindingAST*> empty;
+                               $$ = new BlockAST(empty,$2); }
+| "{" vardefs ";" stmts "}"  { $$ = new BlockAST($2,$4); };
+
 vardefs:
-  binding                 { std::vector<VarBindingAST*> definitions;
-                            definitions.push_back($1);
-                            $$ = definitions; }
-| vardefs ";" binding     { $1.push_back($3);
-                            $$ = $1; }
-                            
+  binding                    { std::vector<VarBindingAST*> definitions;
+                               definitions.push_back($1);
+                               $$ = definitions; }
+| vardefs ";" binding        { $1.push_back($3);
+                               $$ = $1; };
+
 binding:
-  "var" "id" "=" exp      { $$ = new VarBindingAST($2,$4); }
+  "var" "id" initexp         { $$ = new VarBindingAST($2,$3); };
+
+exp:
+  exp "+" exp                { $$ = new BinaryExprAST('+',$1,$3); }
+| exp "-" exp                { $$ = new BinaryExprAST('-',$1,$3); }
+| exp "*" exp                { $$ = new BinaryExprAST('*',$1,$3); }
+| exp "/" exp                { $$ = new BinaryExprAST('/',$1,$3); }
+| idexp                      { $$ = $1; }
+| "(" exp ")"                { $$ = $2; }
+| "number"                   { $$ = new NumberExprAST($1); }
+| expif                      { $$ = $1; };
+
+initexp:
+  %empty                     { $$ = nullptr; }
+| "=" exp                    { $$ = $2; };
                       
 expif:
-  condexp "?" exp ":" exp { $$ = new IfExprAST($1,$3,$5); }
+  condexp "?" exp ":" exp    { $$ = new IfExprAST($1,$3,$5); }
 
 condexp:
-  exp "<" exp           { $$ = new BinaryExprAST('<',$1,$3); }
-| exp "==" exp          { $$ = new BinaryExprAST('=',$1,$3); }
+  exp "<" exp                { $$ = new BinaryExprAST('<',$1,$3); }
+| exp "==" exp               { $$ = new BinaryExprAST('=',$1,$3); };
 
 idexp:
-  "id"                  { $$ = new VariableExprAST($1); }
-| "id" "(" optexp ")"   { $$ = new CallExprAST($1,$3); };
+  "id"                       { $$ = new VariableExprAST($1); }
+| "id" "(" optexp ")"        { $$ = new CallExprAST($1,$3); };
 
 optexp:
-  %empty                { std::vector<ExprAST*> args;
-			 $$ = args; }
-| explist               { $$ = $1; };
+  %empty                     { std::vector<ExprAST*> args;
+		               $$ = args; }
+| explist                    { $$ = $1; };
 
 explist:
-  exp                   { std::vector<ExprAST*> args;
-                         args.push_back($1);
-			 $$ = args;
-                        }
-| exp "," explist       { $3.insert($3.begin(), $1); $$ = $3; };
- 
+  exp                        { std::vector<ExprAST*> args;
+                               args.push_back($1);
+			       $$ = args; }
+| exp "," explist            { $3.insert($3.begin(), $1);
+                               $$ = $3; };
+
 %%
 
 void

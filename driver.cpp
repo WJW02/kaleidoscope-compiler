@@ -212,7 +212,8 @@ Value* IfExprAST::codegen(driver& drv) {
     // condizione vera e, in chiusura di blocco, generiamo il saldo 
     // incondizionato al blocco merge
     builder->SetInsertPoint(TrueBB);
-    Value *TrueV = TrueExp->codegen(drv);
+
+    Value *TrueV = TrueExp->codegen(drv); 
     if (!TrueV)
        return nullptr;
     builder->CreateBr(MergeBB);
@@ -265,6 +266,7 @@ Value* IfExprAST::codegen(driver& drv) {
 };
 
 /********************** Block Expression Tree *********************/
+/*
 BlockExprAST::BlockExprAST(std::vector<VarBindingAST*> Def, ExprAST* Val): 
          Def(std::move(Def)), Val(Val) {};
 
@@ -318,6 +320,49 @@ Value* BlockExprAST::codegen(driver& drv) {
    // restituito dal codice di valutazione dell'espressione
    return blockvalue;
 };
+*/
+
+/**************************** Block Tree ****************************/
+BlockAST::BlockAST(std::vector<VarBindingAST*> Def, std::vector<RootAST*> Stmts): 
+  Def(std::move(Def)), Stmts(std::move(Stmts)) {};
+
+Value* BlockAST::codegen(driver& drv) {
+  // A block expression could or could not start with one or more local
+  // variable definitions.
+  // Each variable gets binded to an expression (which includes variables
+  // and constants as well, see VarBindingAST).
+  // It's important to manage the scope since the new variable should shadow
+  // variables with the same name outside of the block expression
+  std::vector<AllocaInst*> AllocaTmp;
+  for (int i=0, e=Def.size(); i<e; i++) {
+    // For each variable defined in this block expression, generate its
+    // code and get its allocation instruction (which represents its value)
+    AllocaInst *boundval = Def[i]->codegen(drv);
+    if (!boundval) 
+      return LogErrorV("Variable binding generation error");
+    // If it exists a variable with the same name, it gets temporarily
+    // removed and the current one gets inserted (shadowing)
+    AllocaTmp.push_back(drv.NamedValues[Def[i]->getName()]);
+    drv.NamedValues[Def[i]->getName()] = boundval;
+  };
+  // Generates code which evaluates the expression using the symbol table
+  // updated to internal scope
+  
+  Value *val = nullptr;
+  for (int i=0, e=Stmts.size(); i<e; i++) {
+    val = Stmts[i]->codegen(drv);
+    if (!val)
+      return LogErrorV("Statement generation error");
+  };
+
+  // Before exiting block, restore external scope
+  for (int i=0, e=Def.size(); i<e; i++) {
+    drv.NamedValues[Def[i]->getName()] = AllocaTmp[i];
+  };
+  // The return value is evalutation of the expression (which got resolved
+  // recursively)
+  return val;
+};
 
 /************************* Var binding Tree *************************/
 VarBindingAST::VarBindingAST(const std::string Name, ExprAST* Val):
@@ -328,26 +373,29 @@ const std::string& VarBindingAST::getName() const {
 };
 
 AllocaInst* VarBindingAST::codegen(driver& drv) {
-   // Viene subito recuperato il riferimento alla funzione in cui si trova
-   // il blocco corrente. Il riferimento è necessario perché lo spazio necessario
-   // per memorizzare una variabile (ovunque essa sia definita, si tratti cioè
-   // di un parametro oppure di una variabile locale ad un blocco espressione)
-   // viene sempre riservato nell'entry block della funzione. Ricordiamo che
-   // l'allocazione viene fatta tramite l'utility CreateEntryBlockAlloca
-   Function *fun = builder->GetInsertBlock()->getParent();
-   // Ora viene generato il codice che definisce il valore della variabile
-   Value *BoundVal = Val->codegen(drv);
-   if (!BoundVal)  // Qualcosa è andato storto nella generazione del codice?
+  // Gets current basic block's function, which will be passed to
+  // CreateEntryBlockAlloca
+  Function *fun = builder->GetInsertBlock()->getParent();
+
+  // Creates the alloca instruction at the start of the function and returns it
+  AllocaInst *Alloca = CreateEntryBlockAlloca(fun, Name);
+
+  // Generates code and returns the value of RHS
+  Value *BoundVal = nullptr;
+  if (!Val) {
+    BoundVal = Val->codegen(drv);
+    if (!BoundVal)
       return nullptr;
-   // Se tutto ok, si genera l'struzione che alloca memoria per la varibile ...
-   AllocaInst *Alloca = CreateEntryBlockAlloca(fun, Name);
-   // ... e si genera l'istruzione per memorizzarvi il valore dell'espressione,
-   // ovvero il contenuto del registro BoundVal
-   builder->CreateStore(BoundVal, Alloca);
+  } else {
+    BoundVal = ConstantFP::get(Type::getDoubleTy(*context), 0.0);
+  }
+  // Stores value of RHS in the allocated memory, so that it can be retrieved
+  // when needed by a load on the memory pointer by Alloca, which can be
+  // retrieved by name in the symbol table
+  builder->CreateStore(BoundVal, Alloca);
    
-   // L'istruzione di allocazione (che include il registro "puntatore" all'area di memoria
-   // allocata) viene restituita per essere inserita nella symbol table
-   return Alloca;
+  // Returns alloca instruction which will get stored in the symbol table
+  return Alloca;
 };
 
 /************************* Prototype Tree *************************/

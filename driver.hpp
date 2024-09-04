@@ -135,6 +135,7 @@ public:
 };
 
 /// BlockExprAST
+/*
 class BlockExprAST : public ExprAST {
 private:
   std::vector<VarBindingAST*> Def;
@@ -142,7 +143,18 @@ private:
 public:
   BlockExprAST(std::vector<VarBindingAST*> Def, ExprAST* Val);
   Value *codegen(driver& drv) override;
-}; 
+};
+*/
+
+/// BlockAST
+class BlockAST : public ExprAST {
+private:
+  std::vector<VarBindingAST*> Def;
+  std::vector<RootAST*> Stmts;
+public:
+  BlockAST(std::vector<VarBindingAST*> Def, std::vector<RootAST*> Stmts);
+  Value *codegen(driver& drv) override;
+};
 
 /// VarBindingAST
 class VarBindingAST: public RootAST {

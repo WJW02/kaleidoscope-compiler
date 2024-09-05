@@ -21,6 +21,8 @@
   class PrototypeAST;
   class VarBindingAST;
   class BlockAST;
+  class GlobalVarAST;
+  class AssignmentAST;
 }
 
 // The parsing context.
@@ -56,6 +58,7 @@
   EXTERN     "extern"
   DEF        "def"
   VAR        "var"
+  GLOBAL     "global"
 ;
 
 %token <std::string> IDENTIFIER "id"
@@ -78,7 +81,8 @@
 %type <std::vector<RootAST*>> stmts
 %type <RootAST*> stmt
 %type <BlockAST*> block
-
+%type <GlobalVarAST*> globalvar
+%type <AssignmentAST*> assignment
 %%
 
 %start startsymb;
@@ -93,7 +97,8 @@ program:
 top:
   %empty                     { $$ = nullptr; }
 | definition                 { $$ = $1; }
-| external                   { $$ = $1; };
+| external                   { $$ = $1; }
+| globalvar                  { $$ = $1; };
 
 definition:
   "def" proto block          { $$ = new FunctionAST($2,$3); 
@@ -104,6 +109,9 @@ external:
 
 proto:
   "id" "(" idseq ")"         { $$ = new PrototypeAST($1,$3); };
+
+globalvar:
+  "global" "id"              { $$ = new GlobalVarAST($2); };
 
 idseq:
   %empty                     { std::vector<std::string> args;
@@ -124,8 +132,12 @@ stmts:
                                $$ = $3; };
 
 stmt:
-  block                      { $$ = $1; }
+  assignment                 { $$ = $1; }
+| block                      { $$ = $1; }
 | exp                        { $$ = $1; };
+
+assignment:
+  "id" "=" exp               { $$ = new AssignmentAST($1,$3); };
 
 block:
   "{" stmts "}"              { std::vector<VarBindingAST*> empty;
@@ -169,13 +181,13 @@ idexp:
 
 optexp:
   %empty                     { std::vector<ExprAST*> args;
-		               $$ = args; }
+		                           $$ = args; }
 | explist                    { $$ = $1; };
 
 explist:
   exp                        { std::vector<ExprAST*> args;
                                args.push_back($1);
-			       $$ = args; }
+                   			       $$ = args; }
 | exp "," explist            { $3.insert($3.begin(), $1);
                                $$ = $3; };
 

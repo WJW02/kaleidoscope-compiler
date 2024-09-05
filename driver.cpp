@@ -103,10 +103,22 @@ lexval VariableExprAST::getLexVal() const {
 // l'istruzione ma è anche il registro, vista la corrispodenza 1-1 fra le due nozioni), (3)
 // il nome del registro in cui verrà trasferito il valore dalla memoria
 Value *VariableExprAST::codegen(driver& drv) {
-  AllocaInst *A = drv.NamedValues[Name];
-  if (!A)
-     return LogErrorV("Variabile "+Name+" non definita");
-  return builder->CreateLoad(A->getAllocatedType(), A, Name.c_str());
+  // Gets pointer to memory where the value is stored
+  AllocaInst *Alloca = drv.NamedValues[Name];
+
+  // Checks if the variable has been previously defined locally
+  if (Alloca) {
+    return builder->CreateLoad(Alloca->getAllocatedType(), Alloca, Name.c_str());
+  }
+
+  GlobalVariable *GlobalVar = module->getGlobalVariable(Name);
+
+  // Checks if the variable has been previously defined globally
+  if (GlobalVar) {
+    return builder->CreateLoad(GlobalVar->getValueType(), GlobalVar, Name.c_str());
+  }
+  
+  return LogErrorV("Variable "+Name+" not defined");
 }
 
 /******************** Binary Expression Tree **********************/
@@ -522,3 +534,60 @@ Function *FunctionAST::codegen(driver& drv) {
   return nullptr;
 };
 
+/*********************** Global Variable Tree ************************/
+GlobalVarAST::GlobalVarAST(const std::string Name):
+   Name(Name) {};
+   
+const std::string& GlobalVarAST::getName() const { 
+   return Name; 
+};
+
+GlobalVariable* GlobalVarAST::codegen(driver& drv) {
+  // Checks if global variable has been already defined
+  if (module->getGlobalVariable(Name)) {
+    return (GlobalVariable*)LogErrorV("Global variable redefinition");
+  }
+
+  // Create global variable
+  GlobalVariable* globalVar = new GlobalVariable(*module, Type::getDoubleTy(*context), false, GlobalValue::CommonLinkage, ConstantFP::get(Type::getDoubleTy(*context), 0.0), Name);
+
+  // Print global variable
+  globalVar->print(errs());
+  std::cerr << std::endl;
+
+  // Return global variable
+  return globalVar;
+};
+
+/************************* Assignment Tree **************************/
+AssignmentAST::AssignmentAST(const std::string Name, ExprAST* Val):
+   Name(Name), Val(Val) {};
+   
+const std::string& AssignmentAST::getName() const { 
+   return Name; 
+};
+
+Value* AssignmentAST::codegen(driver& drv) {
+  // Gets pointer to memory where the value is stored
+  Value *Alloca = drv.NamedValues[Name];
+
+  // Checks if the variable has been previously defined
+  if (!Alloca) {
+    Alloca = module->getGlobalVariable(Name);
+    if (!Alloca) {
+      return LogErrorV("Variable "+Name+" not defined");
+    }
+  }
+
+  // Generate new value
+  Value* BoundVal = Val->codegen(drv);
+  if (!BoundVal) {
+    return nullptr;
+  }
+
+  // Create instruction that store BoundVal in memory
+  // pointed by Alloca
+  builder->CreateStore(BoundVal, Alloca);
+
+  return Alloca;
+};

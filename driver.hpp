@@ -157,7 +157,7 @@ public:
 };
 
 /// VarBindingAST
-class VarBindingAST: public RootAST {
+class VarBindingAST : public RootAST {
 private:
   const std::string Name;
   ExprAST* Val;
@@ -194,6 +194,27 @@ private:
 public:
   FunctionAST(PrototypeAST* Proto, ExprAST* Body);
   Function *codegen(driver& drv) override;
+};
+
+/// GlobalVarAST
+class GlobalVarAST : public RootAST {
+private:
+  const std::string Name;
+public:
+  GlobalVarAST(const std::string Name);
+  GlobalVariable *codegen(driver& drv) override;
+  const std::string& getName() const;
+};
+
+/// AssignmentAST
+class AssignmentAST : public RootAST {
+private:
+  const std::string Name;
+  ExprAST* Val;
+public:
+  AssignmentAST(const std::string Name, ExprAST* Val);
+  Value *codegen(driver& drv) override;
+  const std::string& getName() const;
 };
 
 #endif // ! DRIVER_HH

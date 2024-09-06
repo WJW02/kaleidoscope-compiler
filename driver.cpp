@@ -349,21 +349,21 @@ Value* BlockAST::codegen(driver& drv) {
   for (int i=0, e=Def.size(); i<e; i++) {
     // For each variable defined in this block expression, generate its
     // code and get its allocation instruction (which represents its value)
-    AllocaInst *boundval = Def[i]->codegen(drv);
-    if (!boundval) 
+    AllocaInst *BoundVal = Def[i]->codegen(drv);
+    if (!BoundVal) 
       return LogErrorV("Variable binding generation error");
     // If it exists a variable with the same name, it gets temporarily
     // removed and the current one gets inserted (shadowing)
     AllocaTmp.push_back(drv.NamedValues[Def[i]->getName()]);
-    drv.NamedValues[Def[i]->getName()] = boundval;
+    drv.NamedValues[Def[i]->getName()] = BoundVal;
   };
 
   // Generates code which evaluate statements using the symbol table
   // updated to internal scope
-  Value *val = nullptr;
+  Value *Val = nullptr;
   for (int i=0, e=Stmts.size(); i<e; i++) {
-    val = Stmts[i]->codegen(drv);
-    if (!val)
+    Val = Stmts[i]->codegen(drv);
+    if (!Val)
       return LogErrorV("Statement generation error");
   };
 
@@ -373,7 +373,7 @@ Value* BlockAST::codegen(driver& drv) {
   };
   // The return value is evalutation of the expression (which got resolved
   // recursively)
-  return val;
+  return Val;
 };
 
 /************************* Var binding Tree *************************/
@@ -549,14 +549,14 @@ GlobalVariable* GlobalVarAST::codegen(driver& drv) {
   }
 
   // Create global variable
-  GlobalVariable* globalVar = new GlobalVariable(*module, Type::getDoubleTy(*context), false, GlobalValue::CommonLinkage, ConstantFP::get(Type::getDoubleTy(*context), 0.0), Name);
+  GlobalVariable* GlobalVar = new GlobalVariable(*module, Type::getDoubleTy(*context), false, GlobalValue::CommonLinkage, ConstantFP::get(Type::getDoubleTy(*context), 0.0), Name);
 
   // Print global variable
-  globalVar->print(errs());
+  GlobalVar->print(errs());
   std::cerr << std::endl;
 
   // Return global variable
-  return globalVar;
+  return GlobalVar;
 };
 
 /************************* Assignment Tree **************************/
@@ -590,4 +590,76 @@ Value* AssignmentAST::codegen(driver& drv) {
   builder->CreateStore(BoundVal, Alloca);
 
   return Alloca;
+};
+
+/************************* If Statement Tree **************************/
+IfStmtAST::IfStmtAST(ExprAST* Cond, RootAST* TrueStmt, RootAST* FalseStmt):
+   Cond(Cond), TrueStmt(TrueStmt), FalseStmt(FalseStmt) {};
+   
+Value* IfStmtAST::codegen(driver& drv) {
+  // Generates code to evaluate the condition and returns the (boolean)
+  // result which gets saved in CondV
+  Value* CondV = Cond->codegen(drv);
+    if (!CondV)
+      return nullptr;
+    
+  // Create true, false and merge branch basic blocks
+  Function *function = builder->GetInsertBlock()->getParent();
+  BasicBlock *TrueBB =  BasicBlock::Create(*context, "truebb", function);
+  // TrueBB is inserted right after the current point
+
+  BasicBlock *FalseBB = nullptr;
+  if (FalseStmt) {
+    FalseBB = BasicBlock::Create(*context, "falsebb");
+  }
+  BasicBlock *MergeBB = BasicBlock::Create(*context, "mergebb");
+  // FalseBB and MergeBB don't get inserted yet, because the true branch
+  // could need more basic blocks to be created, which would need to be
+  // inserted before them
+    
+  // Creates and inserts conditional branch instruction
+  if (FalseBB) {
+    builder->CreateCondBr(CondV, TrueBB, FalseBB);
+  } else {
+    builder->CreateCondBr(CondV, TrueBB, MergeBB);
+  }
+
+  // Positions the builder insertion point to the start of TrueBB,
+  // generates the code of the true branch recursively and lastly
+  // creates and inserts unconditional branch instruction to MergeBB
+  builder->SetInsertPoint(TrueBB);
+  Value *TrueV = TrueStmt->codegen(drv);
+  if (!TrueV)
+    return nullptr;
+  builder->CreateBr(MergeBB);
+
+  // Because the true branch's codegen could have generated other basic
+  // blocks, we need to update TrueBB to the last basic block of the
+  // true branch, because it will be used by the phi node in MergeBB
+  // TrueBB = builder->GetInsertBlock();
+    
+  if (FalseBB) {
+    // Insert FalseBB in the function
+    function->insert(function->end(), FalseBB);
+    // Positions the builder insertion point to the start of FalseBB,
+    // generates the code of the false branch recursively and lastly
+    // creates and inserts unconditional branch instruction to MergeBB
+    builder->SetInsertPoint(FalseBB);
+      
+    Value *FalseV = FalseStmt->codegen(drv);
+    if (!FalseV)
+      return nullptr;
+
+    builder->CreateBr(MergeBB);
+      
+    // Because the false branch's codegen could have generated other basic
+    // blocks, we need to update FalseBB to the last basic block of the
+    // false branch, because it will be used by the phi node in MergeBB
+    // FalseBB = builder->GetInsertBlock();
+  }
+    
+  function->insert(function->end(), MergeBB);
+  // Positions the builder insertion point to the start of MergeBB
+  builder->SetInsertPoint(MergeBB);
+  return ConstantFP::get(Type::getDoubleTy(*context), 0.0);
 };

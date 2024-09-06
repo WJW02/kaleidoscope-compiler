@@ -217,4 +217,15 @@ public:
   const std::string& getName() const;
 };
 
+/// IfStmtAST
+class IfStmtAST : public RootAST {
+private:
+  ExprAST* Cond;
+  RootAST* TrueStmt;
+  RootAST* FalseStmt;
+public:
+  IfStmtAST(ExprAST* Cond, RootAST* TrueStmt, RootAST* FalseStmt);
+  Value *codegen(driver& drv) override;
+};
+
 #endif // ! DRIVER_HH

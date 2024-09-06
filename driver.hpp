@@ -228,4 +228,28 @@ public:
   Value *codegen(driver& drv) override;
 };
 
+/// ForInitAST
+class ForInitAST : public RootAST {
+private:
+  RootAST* Init;
+  bool Binding;
+public:
+  ForInitAST(RootAST* Init, bool Binding);
+  Value *codegen(driver& drv) override;
+  const bool isBinding() const;
+  const std::string& getName() const;
+};
+
+/// ForStmtAST
+class ForStmtAST : public RootAST {
+private:
+  ForInitAST* Init;
+  ExprAST* Cond;
+  RootAST* Update;
+  RootAST* Body;
+public:
+  ForStmtAST(ForInitAST* Init, ExprAST* Cond, RootAST* Update, RootAST* Body);
+  Value *codegen(driver& drv) override;
+};
+
 #endif // ! DRIVER_HH

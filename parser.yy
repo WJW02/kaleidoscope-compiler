@@ -24,6 +24,8 @@
   class GlobalVarAST;
   class AssignmentAST;
   class IfStmtAST;
+  class ForStmtAST;
+  class ForInitAST;
 }
 
 // The parsing context.
@@ -62,6 +64,9 @@
   GLOBAL     "global"
   IF         "if"
   ELSE       "else"
+  FOR        "for"
+  INCR       "++"
+  DECR       "--"
 ;
 
 %token <std::string> IDENTIFIER "id"
@@ -87,6 +92,8 @@
 %type <GlobalVarAST*> globalvar
 %type <AssignmentAST*> assignment
 %type <IfStmtAST*> ifstmt
+%type <ForStmtAST*> forstmt
+%type <ForInitAST*> init
 %%
 
 %start startsymb;
@@ -139,14 +146,26 @@ stmt:
   assignment                             { $$ = $1; }
 | block                                  { $$ = $1; }
 | ifstmt                                 { $$ = $1; }
+| forstmt                                { $$ = $1; }
 | exp                                    { $$ = $1; };
 
 ifstmt:
   "if" "(" condexp ")" stmt              { $$ = new IfStmtAST($3,$5,nullptr); }
 | "if" "(" condexp ")" stmt "else" stmt  { $$ = new IfStmtAST($3,$5,$7); };
 
+forstmt:
+  "for" "(" init ";" condexp ";" assignment ")" stmt  { $$ = new ForStmtAST($3,$5,$7,$9); };
+
+init:
+  binding                                { $$ = new ForInitAST($1,true); }
+| assignment                             { $$ = new ForInitAST($1,false); };
+
 assignment:
-  "id" "=" exp                           { $$ = new AssignmentAST($1,$3); };
+  "id" "=" exp                           { $$ = new AssignmentAST($1,$3); }
+| "++" "id"                              { $$ = new AssignmentAST($2,new BinaryExprAST('+',new VariableExprAST($2),new NumberExprAST(1))); };
+| "--" "id"                              { $$ = new AssignmentAST($2,new BinaryExprAST('-',new VariableExprAST($2),new NumberExprAST(1))); };
+| "id" "++"                              { $$ = new AssignmentAST($1,new BinaryExprAST('+',new VariableExprAST($1),new NumberExprAST(1))); };
+| "id" "--"                              { $$ = new AssignmentAST($1,new BinaryExprAST('-',new VariableExprAST($1),new NumberExprAST(1))); };
 
 block:
   "{" stmts "}"                          { std::vector<VarBindingAST*> empty;

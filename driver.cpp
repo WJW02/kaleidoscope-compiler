@@ -575,7 +575,8 @@ Value* AssignmentAST::codegen(driver& drv) {
   if (!Alloca) {
     Alloca = module->getGlobalVariable(Name);
     if (!Alloca) {
-      return LogErrorV("Variable "+Name+" not defined");
+      std::cerr << ("Variable "+Name+" not defined") << std::endl;
+      return nullptr;
     }
   }
 
@@ -661,5 +662,99 @@ Value* IfStmtAST::codegen(driver& drv) {
   function->insert(function->end(), MergeBB);
   // Positions the builder insertion point to the start of MergeBB
   builder->SetInsertPoint(MergeBB);
+  return ConstantFP::get(Type::getDoubleTy(*context), 0.0);
+};
+
+/************************* For Initialization Tree **************************/
+ForInitAST::ForInitAST(RootAST* Init, bool Binding):
+  Init(Init), Binding(Binding) {};
+
+const bool ForInitAST::isBinding() const {
+  return Binding;
+}
+
+const std::string& ForInitAST::getName() const {
+  if (isBinding()) {
+    return static_cast<VarBindingAST*>(Init)->getName();
+  }
+  return static_cast<AssignmentAST*>(Init)->getName();
+}
+   
+Value* ForInitAST::codegen(driver& drv) {
+  return Init->codegen(drv);
+}
+
+/************************* For Statement Tree **************************/
+ForStmtAST::ForStmtAST(ForInitAST* Init, ExprAST* Cond, RootAST* Update, RootAST* Body):
+  Init(Init), Cond(Cond), Update(Update), Body(Body) {};
+   
+Value* ForStmtAST::codegen(driver& drv) {
+  // Creates basic blocks (not inserted yet)
+  Function *function = builder->GetInsertBlock()->getParent();
+  BasicBlock *HeaderBB =  BasicBlock::Create(*context, "loopheader");
+  BasicBlock *BodyBB =  BasicBlock::Create(*context, "loopbody");
+  BasicBlock *LatchBB =  BasicBlock::Create(*context, "loopupdate");
+  BasicBlock *ExitBB =  BasicBlock::Create(*context, "loopexit");
+
+  // Generate loop counter variable initialization
+  Value* CounterAlloca = Init->codegen(drv);
+  if (!CounterAlloca) {
+    return nullptr;
+  }
+
+  // Inserts the counter in the symbol table if it is a binding
+  if (Init->isBinding()) {
+    drv.NamedValues[Init->getName()] = static_cast<AllocaInst*>(CounterAlloca);
+  }
+
+  // Create unconditional branch to HeaderBB
+  builder->CreateBr(HeaderBB);
+
+  // Inserts HeaderBB (which is also the exiting node) in the function
+  // and sets it as the builder's insertion block
+  function->insert(function->end(), HeaderBB);
+  builder->SetInsertPoint(HeaderBB);
+
+  // Generate loop condition code
+  Value* CondV = Cond->codegen(drv);
+  if (!CondV) {
+    return nullptr;
+  }
+
+  // Creates conditional branch:
+  //   - True: jump to starting block of loop body
+  //   - False: jump to exit block
+  builder->CreateCondBr(CondV, BodyBB, ExitBB);
+
+  // Inserts BodyBB in the function and sets it as the builder's insertion block
+  function->insert(function->end(), BodyBB);
+  builder->SetInsertPoint(BodyBB);
+
+  // Generates loop body
+  Value* BodyV = Body->codegen(drv);
+  if (!BodyV) {
+    return nullptr;
+  }
+
+  // Creates unconditional branch to LatchBB
+  builder->CreateBr(LatchBB);
+
+  // Inserts LatchBB in the function and sets it as the builder's insertion block
+  function->insert(function->end(), LatchBB);
+  builder->SetInsertPoint(LatchBB);
+
+  // Generates counter update code
+  Value* UpdateV = Update->codegen(drv);
+  if (!UpdateV) {
+    return nullptr;
+  }
+  
+  // Creates unconditional branch to HeaderBB
+  builder->CreateBr(HeaderBB);
+
+  // Inserts ExitBB in the function and sets it as the builder's insertion block
+  function->insert(function->end(), ExitBB);
+  builder->SetInsertPoint(ExitBB);
+
   return ConstantFP::get(Type::getDoubleTy(*context), 0.0);
 };

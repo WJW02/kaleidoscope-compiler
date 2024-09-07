@@ -66,6 +66,9 @@ blank   [ \t]
 "for"    { return yy::parser::make_FOR(loc); }
 "++"     { return yy::parser::make_INCR(loc); }
 "--"     { return yy::parser::make_DECR(loc); }
+"and"    { return yy::parser::make_AND(loc); }
+"or"     { return yy::parser::make_OR(loc); }
+"not"    { return yy::parser::make_NOT(loc); }
 
 {id}     { return yy::parser::make_IDENTIFIER (yytext, loc); }
 

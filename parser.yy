@@ -26,6 +26,7 @@
   class IfStmtAST;
   class ForStmtAST;
   class ForInitAST;
+  class BinaryExprAST;
 }
 
 // The parsing context.
@@ -67,6 +68,9 @@
   FOR        "for"
   INCR       "++"
   DECR       "--"
+  AND        "and"
+  OR         "or"
+  NOT        "not"
 ;
 
 %token <std::string> IDENTIFIER "id"
@@ -94,6 +98,7 @@
 %type <IfStmtAST*> ifstmt
 %type <ForStmtAST*> forstmt
 %type <ForInitAST*> init
+%type <BinaryExprAST*> relexp
 %%
 
 %start startsymb;
@@ -130,7 +135,10 @@ idseq:
 | "id" idseq                             { $2.insert($2.begin(),$1);
                                            $$ = $2; };
 
-%left ":";
+%left ":" "?";
+%left "or";
+%left "and";
+%right "not";
 %left "<" "==";
 %left "+" "-";
 %left "*" "/";
@@ -201,6 +209,13 @@ expif:
   condexp "?" exp ":" exp                { $$ = new IfExprAST($1,$3,$5); }
 
 condexp:
+  relexp                                 { $$ = $1; }
+| relexp "and" condexp                   { $$ = new BinaryExprAST('&',$1,$3); }
+| relexp "or" condexp                    { $$ = new BinaryExprAST('|',$1,$3); }
+| "not" condexp                          { $$ = new BinaryExprAST('!',$2,nullptr); }
+| "(" condexp ")"                        { $$ = $2; };
+
+relexp:
   exp "<" exp                            { $$ = new BinaryExprAST('<',$1,$3); }
 | exp "==" exp                           { $$ = new BinaryExprAST('=',$1,$3); };
 

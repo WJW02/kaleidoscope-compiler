@@ -159,8 +159,9 @@ public:
 /// VarBindingAST
 class VarBindingAST : public RootAST {
 private:
-  const std::string Name;
   ExprAST* Val;
+protected:
+  const std::string Name;
 public:
   VarBindingAST(const std::string Name, ExprAST* Val);
   AllocaInst *codegen(driver& drv) override;
@@ -250,6 +251,20 @@ private:
 public:
   ForStmtAST(ForInitAST* Init, ExprAST* Cond, RootAST* Update, RootAST* Body);
   Value *codegen(driver& drv) override;
+};
+
+/// ArrayBindingAST
+class ArrayBindingAST : public VarBindingAST {
+private:
+  int Size;
+  std::vector<ExprAST*> ExprList;
+  // const std::string Name;
+  // ExprAST* Val;
+  AllocaInst *CreateEntryBlockAlloca(Function *, StringRef);
+public:
+  ArrayBindingAST(const std::string Name, int Size, std::vector<ExprAST*> ExprList);
+  AllocaInst *codegen(driver& drv) override;
+  // const std::string& getName() const;
 };
 
 #endif // ! DRIVER_HH

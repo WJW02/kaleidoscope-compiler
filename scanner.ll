@@ -69,6 +69,8 @@ blank   [ \t]
 "and"    { return yy::parser::make_AND(loc); }
 "or"     { return yy::parser::make_OR(loc); }
 "not"    { return yy::parser::make_NOT(loc); }
+"["      { return yy::parser::make_LSQBRACKET(loc); }
+"]"      { return yy::parser::make_RSQBRACKET(loc); }
 
 {id}     { return yy::parser::make_IDENTIFIER (yytext, loc); }
 

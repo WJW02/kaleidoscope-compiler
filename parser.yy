@@ -27,6 +27,7 @@
   class ForStmtAST;
   class ForInitAST;
   class BinaryExprAST;
+  class ArrayBindingAST;
 }
 
 // The parsing context.
@@ -71,6 +72,8 @@
   AND        "and"
   OR         "or"
   NOT        "not"
+  LSQBRACKET "["
+  RSQBRACKET "]"
 ;
 
 %token <std::string> IDENTIFIER "id"
@@ -170,10 +173,13 @@ init:
 
 assignment:
   "id" "=" exp                           { $$ = new AssignmentAST($1,$3); }
-| "++" "id"                              { $$ = new AssignmentAST($2,new BinaryExprAST('+',new VariableExprAST($2),new NumberExprAST(1))); };
-| "--" "id"                              { $$ = new AssignmentAST($2,new BinaryExprAST('-',new VariableExprAST($2),new NumberExprAST(1))); };
-| "id" "++"                              { $$ = new AssignmentAST($1,new BinaryExprAST('+',new VariableExprAST($1),new NumberExprAST(1))); };
+| "++" "id"                              { $$ = new AssignmentAST($2,new BinaryExprAST('+',new VariableExprAST($2),new NumberExprAST(1))); }
+| "--" "id"                              { $$ = new AssignmentAST($2,new BinaryExprAST('-',new VariableExprAST($2),new NumberExprAST(1))); }
+| "id" "++"                              { $$ = new AssignmentAST($1,new BinaryExprAST('+',new VariableExprAST($1),new NumberExprAST(1))); }
 | "id" "--"                              { $$ = new AssignmentAST($1,new BinaryExprAST('-',new VariableExprAST($1),new NumberExprAST(1))); };
+/*
+| "id" "[" exp "]"                       {};
+*/
 
 block:
   "{" stmts "}"                          { std::vector<VarBindingAST*> empty;
@@ -188,7 +194,10 @@ vardefs:
                                            $$ = $1; };
 
 binding:
-  "var" "id" initexp                     { $$ = new VarBindingAST($2,$3); };
+  "var" "id" initexp                     { $$ = new VarBindingAST($2,$3); }
+| "var" "id" "[" "number" "]"            { std::vector<ExprAST*> empty;
+                                           $$ = new ArrayBindingAST($2,$4,empty); }
+| "var" "id" "[" "number" "]" "=" "{" explist "}"  { $$ = new ArrayBindingAST($2,$4,$8); };
 
 exp:
   exp "+" exp                            { $$ = new BinaryExprAST('+',$1,$3); }
@@ -222,6 +231,9 @@ relexp:
 idexp:
   "id"                                   { $$ = new VariableExprAST($1); }
 | "id" "(" optexp ")"                    { $$ = new CallExprAST($1,$3); };
+/*
+| "id" "[" exp "]"                       {};
+*/
 
 optexp:
   %empty                                 { std::vector<ExprAST*> args;

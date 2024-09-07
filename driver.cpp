@@ -710,7 +710,11 @@ Value* ForStmtAST::codegen(driver& drv) {
   }
 
   // Inserts the counter in the symbol table if it is a binding
+  AllocaInst* AllocaTmp = nullptr;
   if (Init->isBinding()) {
+    // If it exists a variable with the same name, it gets temporarily
+    // removed and the current one gets inserted (shadowing)
+    AllocaTmp = drv.NamedValues[Init->getName()];
     drv.NamedValues[Init->getName()] = static_cast<AllocaInst*>(CounterAlloca);
   }
 
@@ -763,5 +767,61 @@ Value* ForStmtAST::codegen(driver& drv) {
   function->insert(function->end(), ExitBB);
   builder->SetInsertPoint(ExitBB);
 
+  // Before exiting block, restore external scope
+  if (Init->isBinding()) {
+    drv.NamedValues[Init->getName()] = AllocaTmp;
+  }
+
   return ConstantFP::get(Type::getDoubleTy(*context), 0.0);
+};
+
+/************************* Array Binding Tree **************************/
+ArrayBindingAST::ArrayBindingAST(const std::string Name, int Size, std::vector<ExprAST*> ExprList):
+  VarBindingAST(Name, nullptr), Size(Size), ExprList(std::move(ExprList)) {};
+   
+AllocaInst* ArrayBindingAST::CreateEntryBlockAlloca(Function *fun, StringRef VarName) {
+  IRBuilder<> TmpB(&fun->getEntryBlock(), fun->getEntryBlock().begin());
+  ArrayType *ArrayType = ArrayType::get(Type::getDoubleTy(*context), Size);
+  return TmpB.CreateAlloca(ArrayType, nullptr, VarName);
+}
+
+AllocaInst* ArrayBindingAST::codegen(driver& drv) {
+  // if vector is not empty and Size != ExprList's size, then return nullptr
+  if (ExprList.size() && ExprList.size() != Size) {
+    return nullptr;
+  }
+
+  // CreateEntryAlloca
+  Function *fun = builder->GetInsertBlock()->getParent();
+
+  // Creates the alloca instruction at the start of the function and returns it
+  AllocaInst *Alloca = ArrayBindingAST::CreateEntryBlockAlloca(fun, Name);
+  if (!Alloca) {
+    return nullptr;
+  }
+
+  // Generates code for each expression in ExprList and saves the values in Vals
+  // (won't generate any if ExprList is empty)
+  std::vector<Value*> Vals;
+  for (int i=0, e=ExprList.size(); i<e; i++) {
+    Value* Val = ExprList[i]->codegen(drv);
+    if (!Val) {
+      return nullptr;
+    }
+    Vals.push_back(Val);
+  }
+
+  // Creates a GEP and a store for each value in Vals
+  // (won't generate any if ExprList is empty)
+  ArrayType *ArrayType = ArrayType::get(Type::getDoubleTy(*context), Size);
+  Type *IndexType = IntegerType::get(*context, 32);
+  Constant *BaseIndex = ConstantInt::get(IndexType, 0);
+  for (int i=0, e=Vals.size(); i<e; i++) {
+    Constant *Index = ConstantInt::get(IndexType, i);
+    Value* EP = builder->CreateInBoundsGEP(ArrayType, Alloca, {BaseIndex, Index});
+    builder->CreateStore(Vals[i], EP);
+  }
+
+  // Return alloca instruction
+  return Alloca;
 };

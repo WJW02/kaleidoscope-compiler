@@ -267,4 +267,14 @@ public:
   // const std::string& getName() const;
 };
 
+/// ArrayExprAST
+class ArrayExprAST : public ExprAST {
+private:
+  std::string Name;
+  ExprAST* Index;
+public:
+  ArrayExprAST(const std::string &Name, ExprAST* Index);
+  Value *codegen(driver& drv) override;
+};
+
 #endif // ! DRIVER_HH

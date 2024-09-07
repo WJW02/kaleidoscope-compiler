@@ -582,8 +582,7 @@ Value* AssignmentAST::codegen(driver& drv) {
   if (!Alloca) {
     Alloca = module->getGlobalVariable(Name);
     if (!Alloca) {
-      std::cerr << ("Variable "+Name+" not defined") << std::endl;
-      return nullptr;
+      return LogErrorV("Variable "+Name+" not defined");
     }
   }
 
@@ -825,3 +824,39 @@ AllocaInst* ArrayBindingAST::codegen(driver& drv) {
   // Return alloca instruction
   return Alloca;
 };
+
+/************************* Array Expression Tree **************************/
+ArrayExprAST::ArrayExprAST(const std::string &Name, ExprAST* Index):
+  Name(Name), Index(Index) {};
+
+Value *ArrayExprAST::codegen(driver& drv) {
+  // Gets array base pointer
+  AllocaInst *Alloca = drv.NamedValues[Name];
+
+  // Checks if the variable has been previously defined locally
+  if (!Alloca) {
+    return LogErrorV("Variable "+Name+" not defined");
+  }
+
+  // Checks if the variable is an array
+  if (!Alloca->getAllocatedType()->isArrayTy()) {
+    return LogErrorV("Variable "+Name+" is not an array");
+  }
+
+  // Generates code and gets value of Index
+  Value* IndexFP = Index->codegen(drv);
+  if (!IndexFP) {
+    return nullptr;
+  }
+
+  // Creates conversion instruction from double to int
+  Type *IndexType = IntegerType::get(*context, 32);
+  Value *IndexInt = builder->CreateFPToUI(IndexFP, IndexType);
+  Constant *BaseIndex = ConstantInt::get(IndexType, 0);
+
+  // Creates GEP instruction
+  Value* EP = builder->CreateInBoundsGEP(Alloca->getAllocatedType(), Alloca, {BaseIndex, IndexInt});
+
+  // Creates and returns load instruction for Name[Index]
+  return builder->CreateLoad(Type::getDoubleTy(*context), Alloca, Name.c_str());
+}

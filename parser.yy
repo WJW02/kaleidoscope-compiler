@@ -178,7 +178,7 @@ assignment:
 | "id" "++"                              { $$ = new AssignmentAST($1,new BinaryExprAST('+',new VariableExprAST($1),new NumberExprAST(1))); }
 | "id" "--"                              { $$ = new AssignmentAST($1,new BinaryExprAST('-',new VariableExprAST($1),new NumberExprAST(1))); };
 /*
-| "id" "[" exp "]"                       {};
+| "id" "[" exp "]" "=" exp               {};
 */
 
 block:
@@ -230,10 +230,8 @@ relexp:
 
 idexp:
   "id"                                   { $$ = new VariableExprAST($1); }
-| "id" "(" optexp ")"                    { $$ = new CallExprAST($1,$3); };
-/*
-| "id" "[" exp "]"                       {};
-*/
+| "id" "(" optexp ")"                    { $$ = new CallExprAST($1,$3); }
+| "id" "[" exp "]"                       { $$ = new ArrayExprAST($1,$3); };
 
 optexp:
   %empty                                 { std::vector<ExprAST*> args;

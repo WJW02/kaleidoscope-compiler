@@ -1,6 +1,6 @@
 .PHONY: clean all
 
-all: floor rand fibonacci sqrt eqn2 inssort inssort2 sqrt2
+all: floor rand fibonacci sqrt eqn2 inssort inssort2 sqrt2 sqrt3
 
 floor: callfloor.o floor.o
 	clang++-18 -o floor callfloor.o floor.o

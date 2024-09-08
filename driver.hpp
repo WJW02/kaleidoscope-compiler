@@ -199,7 +199,7 @@ public:
 
 /// GlobalVarAST
 class GlobalVarAST : public RootAST {
-private:
+protected:
   const std::string Name;
 public:
   GlobalVarAST(const std::string Name);
@@ -277,13 +277,22 @@ public:
   Value *codegen(driver& drv) override;
 };
 
-/// ArrayAssignment
+/// ArrayAssignmentAST
 class ArrayAssignmentAST : public AssignmentAST {
 private:
   ExprAST* Index;
 public:
   ArrayAssignmentAST(const std::string Name, ExprAST* Index, ExprAST* Val);
   Value *codegen(driver& drv) override;
+};
+
+/// GlobalArrayAST
+class GlobalArrayAST : public GlobalVarAST {
+private:
+  int Size;
+public:
+  GlobalArrayAST(const std::string Name, int Size);
+  GlobalVariable *codegen(driver& drv) override;
 };
 
 #endif // ! DRIVER_HH

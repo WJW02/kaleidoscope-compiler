@@ -30,6 +30,7 @@
   class ArrayBindingAST;
   class ArrayExprAST;
   class ArrayAssignmentAST;
+  class GlobalArrayAST;
 }
 
 // The parsing context.
@@ -132,7 +133,8 @@ proto:
   "id" "(" idseq ")"                     { $$ = new PrototypeAST($1,$3); };
 
 globalvar:
-  "global" "id"                          { $$ = new GlobalVarAST($2); };
+  "global" "id"                          { $$ = new GlobalVarAST($2); }
+| "global" "id" "[" "number" "]"           { $$ = new GlobalArrayAST($2,$4); };
 
 idseq:
   %empty                                 { std::vector<std::string> args;

@@ -552,7 +552,7 @@ const std::string& GlobalVarAST::getName() const {
 GlobalVariable* GlobalVarAST::codegen(driver& drv) {
   // Checks if global variable has been already defined
   if (module->getGlobalVariable(Name)) {
-    return (GlobalVariable*)LogErrorV("Global variable redefinition");
+    return (GlobalVariable*)LogErrorV("Global variable "+Name+" has already been defined");
   }
 
   // Create global variable
@@ -834,31 +834,59 @@ Value *ArrayExprAST::codegen(driver& drv) {
   AllocaInst *Alloca = drv.NamedValues[Name];
 
   // Checks if the variable has been previously defined locally
-  if (!Alloca) {
-    return LogErrorV("Variable "+Name+" not defined");
+  if (Alloca) {
+    // Checks if the variable is an array
+    if (!Alloca->getAllocatedType()->isArrayTy()) {
+      return LogErrorV("Variable "+Name+" is not an array");
+    }
+
+    // Generates code and gets value of Index
+    Value* IndexFP = Index->codegen(drv);
+    if (!IndexFP) {
+      return nullptr;
+    }
+
+    // Creates conversion instruction from double to int
+    Type *IndexType = IntegerType::get(*context, 32);
+    Value *IndexInt = builder->CreateFPToUI(IndexFP, IndexType);
+    Constant *BaseIndex = ConstantInt::get(IndexType, 0);
+
+    // Creates GEP instruction
+    Value* EP = builder->CreateInBoundsGEP(Alloca->getAllocatedType(), Alloca, {BaseIndex, IndexInt});
+
+    // Creates and returns load instruction for Name[Index]
+    return builder->CreateLoad(Type::getDoubleTy(*context), EP, Name.c_str());
   }
 
-  // Checks if the variable is an array
-  if (!Alloca->getAllocatedType()->isArrayTy()) {
-    return LogErrorV("Variable "+Name+" is not an array");
+  // Gets array
+  GlobalVariable *GlobalVar = module->getGlobalVariable(Name);
+
+  // Checks if the variable has been previously defined globally
+  if (GlobalVar) {
+    // Checks if the variable is an array
+    if (!GlobalVar->getValueType()->isArrayTy()) {
+      return LogErrorV("Variable "+Name+" is not an array");
+    }
+
+    // Generates code and gets value of Index
+    Value* IndexFP = Index->codegen(drv);
+    if (!IndexFP) {
+      return nullptr;
+    }
+
+    // Creates conversion instruction from double to int
+    Type *IndexType = IntegerType::get(*context, 32);
+    Value *IndexInt = builder->CreateFPToUI(IndexFP, IndexType);
+    Constant *BaseIndex = ConstantInt::get(IndexType, 0);
+
+    // Creates GEP instruction
+    Value* EP = builder->CreateInBoundsGEP(GlobalVar->getValueType(), GlobalVar, {BaseIndex, IndexInt});
+
+    // Creates and returns load instruction for Name[Index]
+    return builder->CreateLoad(Type::getDoubleTy(*context), EP, Name.c_str());
   }
 
-  // Generates code and gets value of Index
-  Value* IndexFP = Index->codegen(drv);
-  if (!IndexFP) {
-    return nullptr;
-  }
-
-  // Creates conversion instruction from double to int
-  Type *IndexType = IntegerType::get(*context, 32);
-  Value *IndexInt = builder->CreateFPToUI(IndexFP, IndexType);
-  Constant *BaseIndex = ConstantInt::get(IndexType, 0);
-
-  // Creates GEP instruction
-  Value* EP = builder->CreateInBoundsGEP(Alloca->getAllocatedType(), Alloca, {BaseIndex, IndexInt});
-
-  // Creates and returns load instruction for Name[Index]
-  return builder->CreateLoad(Type::getDoubleTy(*context), EP, Name.c_str());
+  return LogErrorV("Variable "+Name+" not defined");
 }
 
 /************************* Array Assignment Tree **************************/
@@ -869,38 +897,91 @@ Value* ArrayAssignmentAST::codegen(driver& drv) {
   // Gets array base pointer
   AllocaInst *Alloca = drv.NamedValues[Name];
 
+  Value *EP = nullptr;
+  Value *RetVal = nullptr;
   // Checks if the variable has been previously defined locally
-  if (!Alloca) {
-    return LogErrorV("Variable "+Name+" not defined");
+  if (Alloca) {
+    // Checks if the variable is an array
+    if (!Alloca->getAllocatedType()->isArrayTy()) {
+      return LogErrorV("Variable "+Name+" is not an array");
+    }
+
+    // Generates code and gets value of Index
+    Value* IndexFP = Index->codegen(drv);
+    if (!IndexFP) {
+      return nullptr;
+    }
+
+    // Creates conversion instruction from double to int
+    Type *IndexType = IntegerType::get(*context, 32);
+    Value *IndexInt = builder->CreateFPToUI(IndexFP, IndexType);
+    Constant *BaseIndex = ConstantInt::get(IndexType, 0);
+
+    // Creates GEP instruction
+    EP = builder->CreateInBoundsGEP(Alloca->getAllocatedType(), Alloca, {BaseIndex, IndexInt});
+    RetVal = Alloca;
   }
 
-  // Checks if the variable is an array
-  if (!Alloca->getAllocatedType()->isArrayTy()) {
-    return LogErrorV("Variable "+Name+" is not an array");
+  // Gets array
+  GlobalVariable *GlobalVar = module->getGlobalVariable(Name);
+
+  // Checks if the variable has been previously defined globally
+  if (GlobalVar) {
+    // Checks if the variable is an array
+    if (!GlobalVar->getValueType()->isArrayTy()) {
+      return LogErrorV("Variable "+Name+" is not an array");
+    }
+
+    // Generates code and gets value of Index
+    Value* IndexFP = Index->codegen(drv);
+    if (!IndexFP) {
+      return nullptr;
+    }
+
+    // Creates conversion instruction from double to int
+    Type *IndexType = IntegerType::get(*context, 32);
+    Value *IndexInt = builder->CreateFPToUI(IndexFP, IndexType);
+    Constant *BaseIndex = ConstantInt::get(IndexType, 0);
+
+    // Creates GEP instruction
+    EP = builder->CreateInBoundsGEP(GlobalVar->getValueType(), GlobalVar, {BaseIndex, IndexInt});
+    RetVal = GlobalVar;
   }
 
-  // Generates code and gets value of Index
-  Value* IndexFP = Index->codegen(drv);
-  if (!IndexFP) {
-    return nullptr;
+  if (EP) {
+    // Generates code and gets value to assign to Name[Index]
+    Value* BoundVal = Val->codegen(drv);
+    if (!BoundVal) {
+      return nullptr;
+    }
+
+    // Creates and returns store instruction for Name[Index]=Val
+    builder->CreateStore(BoundVal, EP);
+
+    return RetVal;
   }
 
-  // Creates conversion instruction from double to int
-  Type *IndexType = IntegerType::get(*context, 32);
-  Value *IndexInt = builder->CreateFPToUI(IndexFP, IndexType);
-  Constant *BaseIndex = ConstantInt::get(IndexType, 0);
+  return LogErrorV("Variable "+Name+" not defined");
+};
 
-  // Creates GEP instruction
-  Value* EP = builder->CreateInBoundsGEP(Alloca->getAllocatedType(), Alloca, {BaseIndex, IndexInt});
+/*********************** Global Array Tree ************************/
+GlobalArrayAST::GlobalArrayAST(const std::string Name, int Size):
+  GlobalVarAST(Name), Size(Size) {};
 
-  // Generates code and gets value to assign to Name[Index]
-  Value* BoundVal = Val->codegen(drv);
-  if (!BoundVal) {
-    return nullptr;
+GlobalVariable* GlobalArrayAST::codegen(driver& drv) {
+  // Checks if global variable has been already defined
+  if (module->getGlobalVariable(Name)) {
+    return (GlobalVariable*)LogErrorV("Global variable "+Name+" has already been defined");
   }
 
-  // Creates and returns load instruction for Name[Index]
-  builder->CreateStore(BoundVal, EP);
+  // Create global variable
+  ArrayType *ArrayType = ArrayType::get(Type::getDoubleTy(*context), Size);
+  GlobalVariable* GlobalVar = new GlobalVariable(*module, ArrayType, false, GlobalValue::CommonLinkage, Constant::getNullValue(ArrayType), Name);
 
-  return Alloca;
+  // Print global variable
+  GlobalVar->print(errs());
+  std::cerr << std::endl;
+
+  // Return global variable
+  return GlobalVar;
 };

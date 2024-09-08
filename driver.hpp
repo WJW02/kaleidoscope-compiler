@@ -209,7 +209,7 @@ public:
 
 /// AssignmentAST
 class AssignmentAST : public RootAST {
-private:
+protected:
   const std::string Name;
   ExprAST* Val;
 public:
@@ -274,6 +274,15 @@ private:
   ExprAST* Index;
 public:
   ArrayExprAST(const std::string &Name, ExprAST* Index);
+  Value *codegen(driver& drv) override;
+};
+
+/// ArrayAssignment
+class ArrayAssignmentAST : public AssignmentAST {
+private:
+  ExprAST* Index;
+public:
+  ArrayAssignmentAST(const std::string Name, ExprAST* Index, ExprAST* Val);
   Value *codegen(driver& drv) override;
 };
 

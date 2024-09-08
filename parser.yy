@@ -28,6 +28,8 @@
   class ForInitAST;
   class BinaryExprAST;
   class ArrayBindingAST;
+  class ArrayExprAST;
+  class ArrayAssignmentAST;
 }
 
 // The parsing context.
@@ -176,10 +178,8 @@ assignment:
 | "++" "id"                              { $$ = new AssignmentAST($2,new BinaryExprAST('+',new VariableExprAST($2),new NumberExprAST(1))); }
 | "--" "id"                              { $$ = new AssignmentAST($2,new BinaryExprAST('-',new VariableExprAST($2),new NumberExprAST(1))); }
 | "id" "++"                              { $$ = new AssignmentAST($1,new BinaryExprAST('+',new VariableExprAST($1),new NumberExprAST(1))); }
-| "id" "--"                              { $$ = new AssignmentAST($1,new BinaryExprAST('-',new VariableExprAST($1),new NumberExprAST(1))); };
-/*
-| "id" "[" exp "]" "=" exp               {};
-*/
+| "id" "--"                              { $$ = new AssignmentAST($1,new BinaryExprAST('-',new VariableExprAST($1),new NumberExprAST(1))); }
+| "id" "[" exp "]" "=" exp               { $$ = new ArrayAssignmentAST($1,$3,$6); };
 
 block:
   "{" stmts "}"                          { std::vector<VarBindingAST*> empty;

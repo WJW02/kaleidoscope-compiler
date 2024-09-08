@@ -858,5 +858,49 @@ Value *ArrayExprAST::codegen(driver& drv) {
   Value* EP = builder->CreateInBoundsGEP(Alloca->getAllocatedType(), Alloca, {BaseIndex, IndexInt});
 
   // Creates and returns load instruction for Name[Index]
-  return builder->CreateLoad(Type::getDoubleTy(*context), Alloca, Name.c_str());
+  return builder->CreateLoad(Type::getDoubleTy(*context), EP, Name.c_str());
 }
+
+/************************* Array Assignment Tree **************************/
+ArrayAssignmentAST::ArrayAssignmentAST(const std::string Name, ExprAST* Index, ExprAST* Val):
+  AssignmentAST(Name, Val), Index(Index) {};
+
+Value* ArrayAssignmentAST::codegen(driver& drv) {
+  // Gets array base pointer
+  AllocaInst *Alloca = drv.NamedValues[Name];
+
+  // Checks if the variable has been previously defined locally
+  if (!Alloca) {
+    return LogErrorV("Variable "+Name+" not defined");
+  }
+
+  // Checks if the variable is an array
+  if (!Alloca->getAllocatedType()->isArrayTy()) {
+    return LogErrorV("Variable "+Name+" is not an array");
+  }
+
+  // Generates code and gets value of Index
+  Value* IndexFP = Index->codegen(drv);
+  if (!IndexFP) {
+    return nullptr;
+  }
+
+  // Creates conversion instruction from double to int
+  Type *IndexType = IntegerType::get(*context, 32);
+  Value *IndexInt = builder->CreateFPToUI(IndexFP, IndexType);
+  Constant *BaseIndex = ConstantInt::get(IndexType, 0);
+
+  // Creates GEP instruction
+  Value* EP = builder->CreateInBoundsGEP(Alloca->getAllocatedType(), Alloca, {BaseIndex, IndexInt});
+
+  // Generates code and gets value to assign to Name[Index]
+  Value* BoundVal = Val->codegen(drv);
+  if (!BoundVal) {
+    return nullptr;
+  }
+
+  // Creates and returns load instruction for Name[Index]
+  builder->CreateStore(BoundVal, EP);
+
+  return Alloca;
+};
